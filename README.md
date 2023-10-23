@@ -1,5 +1,7 @@
-Some model that I do not provide that mean when you run the code it will download automatically.
-Please change your file path of your model in code.
-If you have some problem contact me flooktae@gmail.com.
+Some model that I do not provide that mean when you run the code it will download automatically.\n
+Please change your file path of your model in code.\n
+you don't need to download Bot_update_pb2.py\n
+If you have some problem contact me flooktae@gmail.com.\n
+
 
 
