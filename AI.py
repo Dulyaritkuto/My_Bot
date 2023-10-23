@@ -3,32 +3,36 @@ import pickle
 import requests
 from bs4 import BeautifulSoup
 import re
-from transformers import BartTokenizer, BartForConditionalGeneration
+from transformers import ViltProcessor,ViltForQuestionAnswering,BartTokenizer, BartForConditionalGeneration,VisionEncoderDecoderModel,ViTImageProcessor,AutoTokenizer
 import webbrowser
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import torch
+from PIL import Image
+
 class song():
     def __init__(self):
-        self.l = {"royalty":"https://www.youtube.com/watch?v=oOi3oJmfz4o&list=RDtBaEwlR8KDw&index=2",
-             "another love":"https://www.youtube.com/watch?v=MwpMEbgC7DA&list=RDtBaEwlR8KDw&index=3",
-             "rise":"https://www.youtube.com/watch?v=fB8TyLTD7EE&list=RDtBaEwlR8KDw&index=4",
-             "andrew tate song":"https://www.youtube.com/watch?v=rBR1nwYIFck&list=RDtBaEwlR8KDw&index=6",
-             "alor": "https://www.youtube.com/watch?v=tBaEwlR8KDw",
-             "ava":"https://www.youtube.com/watch?v=LjY_AOtDMRg",
-            "indila":"https://www.youtube.com/watch?v=vtNJMAyeP0s&list=RDtBaEwlR8KDw&index=13",
-             "dynasty":"https://www.youtube.com/watch?v=5-ZiKXrnvog&list=RDtBaEwlR8KDw&index=18",
-             "mary on cross":"https://www.youtube.com/watch?v=k5mX3NkA7jM",
-             "ghost":"https://www.youtube.com/watch?v=8aKMHe_sRpc",
-             "gangster paradise":"https://www.youtube.com/watch?v=LyeWUMJpTgw",
-             "fracture":"https://www.youtube.com/watch?v=38750lf-u5w",
-             "deadwood":"https://www.youtube.com/watch?v=T8BI2fKzdys",
-             "lilly":"https://www.youtube.com/watch?v=ox4tmEV6-QU"}
+        self.l = {"royalty": "https://www.youtube.com/watch?v=oOi3oJmfz4o&list=RDtBaEwlR8KDw&index=2",
+                  "another love": "https://www.youtube.com/watch?v=MwpMEbgC7DA&list=RDtBaEwlR8KDw&index=3",
+                  "rise": "https://www.youtube.com/watch?v=fB8TyLTD7EE&list=RDtBaEwlR8KDw&index=4",
+                  "andrew tate song": "https://www.youtube.com/watch?v=rBR1nwYIFck&list=RDtBaEwlR8KDw&index=6",
+                  "alor": "https://www.youtube.com/watch?v=tBaEwlR8KDw",
+                  "ava": "https://www.youtube.com/watch?v=LjY_AOtDMRg",
+                  "indila": "https://www.youtube.com/watch?v=vtNJMAyeP0s&list=RDtBaEwlR8KDw&index=13",
+                  "dynasty": "https://www.youtube.com/watch?v=5-ZiKXrnvog&list=RDtBaEwlR8KDw&index=18",
+                  "mary on cross": "https://www.youtube.com/watch?v=k5mX3NkA7jM",
+                  "ghost": "https://www.youtube.com/watch?v=8aKMHe_sRpc",
+                  "gangster paradise": "https://www.youtube.com/watch?v=LyeWUMJpTgw",
+                  "fracture": "https://www.youtube.com/watch?v=38750lf-u5w",
+                  "deadwood": "https://www.youtube.com/watch?v=T8BI2fKzdys",
+                  "lilly": "https://www.youtube.com/watch?v=ox4tmEV6-QU"}
+
     def get_list_song(self):
         return self.l.keys()
-    def play_song(self,song):
+
+    def play_song(self, song):
         speak = pyttsx3.init()
-        self.p =[]
+        self.p = []
         for x in self.l.keys():
             self.p.append(x)
         if song.lower() not in self.p:
@@ -38,7 +42,8 @@ class song():
         else:
             webbrowser.get().open(self.l[song.lower()])
 
-def visual_documnet_anwer(question_for_asking,path_to_documnet):
+
+def visual_documnet_anwer(question_for_asking, path_to_documnet):
     import os
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     from transformers import DonutProcessor, VisionEncoderDecoderModel
@@ -77,11 +82,62 @@ def visual_documnet_anwer(question_for_asking,path_to_documnet):
     print(processor.token2json(sequence))
 
 
+class Visual_processing():
+    def __init__(self):
+        self.model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning",
+                                                               cache_dir=r"data/model_statedict")
+        self.feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning",
+                                                                   cache_dir=r"data/model_statedict")
+        self.tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning",
+                                                       cache_dir=r"data/model_statedict")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+        self.max_length = 16
+        self.num_beams = 4
+        self.gen_kwargs = {"max_length": self.max_length, "num_beams": self.num_beams}
+
+    def predict_step(self, image_paths):
+        images = []
+        path = image_paths
+        for image_path in image_paths:
+            i_image = Image.open(image_path)
+            if i_image.mode != "RGB":
+                i_image = i_image.convert(mode="RGB")
+
+            images.append(i_image)
+        pixel_values = self.feature_extractor(images=images, return_tensors="pt").pixel_values
+        pixel_values = pixel_values.to(self.device)
+
+        output_ids = self.model.generate(pixel_values, **self.gen_kwargs)
+
+        preds = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        preds = [pred.strip() for pred in preds]
+        return preds, image_paths
+
+
+def Visual_Questioner(question, path):
+    url = path
+    image = Image.open(url)
+    text = question
+    processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa", cache_dir=r"data/model_statedict")
+    model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa",
+                                                     cache_dir=r"data/model_statedict")
+    # prepare inputs
+    encoding = processor(image, text, return_tensors="pt")
+    # forward pass
+    outputs = model(**encoding)
+    logits = outputs.logits
+    idx = logits.argmax(-1).item()
+    print("Predicted answer:", model.config.id2label[idx])
+    return model.config.id2label[idx]
+
+
 def get_time():
     import datetime
     current_time = datetime.datetime.now().strftime("%H:%M")
     print("Current time:", current_time)
     return current_time
+
 
 def BART_with_raw_data(data):
     tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn", cache_dir=r"data/model_statedict")
@@ -92,6 +148,7 @@ def BART_with_raw_data(data):
     summary = tokenizer.decode(summary_ids.squeeze(), skip_special_tokens=True)
     print(summary)
     return summary
+
 
 def BART_summarize(path):
     tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn", cache_dir=r"data/model_statedict")
@@ -111,12 +168,11 @@ class searcher():
     def __init__(self):
         self.say_ = pyttsx3.init()
 
-
-    def say(self,data):
+    def say(self, data):
         self.say_.say(data)
         self.say_.runAndWait()
 
-    def check_keyword(self,x):
+    def check_keyword(self, x):
         with open(r"data/data/word_memmory.pickle", "rb") as f1:
             search_key_word = pickle.load(f1)
 
@@ -141,9 +197,10 @@ class searcher():
         else:
             return False
 
-    def remove_text(self,text):
+    def remove_text(self, text):
 
-        remove_text =['what','is','i','want','known','know','wondering','show','me','do','you','show','some','data','about']
+        remove_text = ['what', 'is', 'i', 'want', 'known', 'know', 'wondering', 'show', 'me', 'do', 'you', 'show',
+                       'some', 'data', 'about']
 
         search_text = [word for word in text if word not in remove_text]
         print(text)
@@ -154,7 +211,7 @@ class searcher():
 
         return query_key
 
-    def query_wikipedia(self,user_query):
+    def query_wikipedia(self, user_query):
         # Google
 
         URL = "https://www.google.co.in/search?q=" + user_query
@@ -165,25 +222,25 @@ class searcher():
         soup = BeautifulSoup(page.content, 'html.parser')
         soup = str(soup)
         any = r'https://en.wikipedia.org/wiki/[^"\']+'
-        x = re.findall(any,soup)
+        x = re.findall(any, soup)
         print(x)
         w = int(input("type your index to get data : "))
-        url =x[w]
+        url = x[w]
         result = requests.get(url)
-        doc = BeautifulSoup(result.text,"html.parser")
+        doc = BeautifulSoup(result.text, "html.parser")
         paragraphs = []
         content_div = doc.find('div', {'id': 'mw-content-text'})
 
         for paragraph in content_div.find_all('p'):
             paragraphs.append(paragraph.text)
         paragraphs = paragraphs[1:]
-        result  = " ".join(paragraphs)
+        result = " ".join(paragraphs)
         modified_data = re.sub(r'\[\d+\]', '', result)
         print(modified_data)
         return modified_data
 
 
-def draw_image(prompt_t,save_image =False):
+def draw_image(prompt_t, save_image=False):
     from diffusers import StableDiffusionPipeline
 
     from keras.models import load_model
@@ -191,7 +248,8 @@ def draw_image(prompt_t,save_image =False):
     from keras.utils import pad_sequences
     import tensorflow as tf
     model_id = "runwayml/stable-diffusion-v1-5"
-    pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float32,cache_dir=r"data/model_statedict")
+    pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float32,
+                                                   cache_dir=r"data/model_statedict")
     prompt = prompt_t
     image = pipe(prompt).images[0]
     plt.imshow(image)
@@ -214,11 +272,12 @@ def draw_image(prompt_t,save_image =False):
         input_list = pad_sequences(input_list, maxlen=40, padding="post")
         m = model.predict(input_list)
         y = m.argmax()
-        if y==0:
+        if y == 0:
             image.save(f"{prompt}.png")
         else:
             print("keep that in mind your image does not store this time")
     return image
+
 
 text_speech = pyttsx3.init()
 local_path = (
@@ -227,7 +286,7 @@ local_path = (
 from langchain import ConversationChain
 from langchain.llms import GPT4All
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.schema import SystemMessage,HumanMessage
+from langchain.schema import SystemMessage, HumanMessage
 import tensorflow as tf
 from nltk.tokenize import word_tokenize
 from keras.utils import pad_sequences
@@ -241,9 +300,9 @@ print(word_to_index)
 
 callbacks = [StreamingStdOutCallbackHandler()]
 # Verbose is required to pass to the callback manager
-llm = GPT4All(model=local_path, callbacks=callbacks, verbose=True,backend="gptj")
+llm = GPT4All(model=local_path, callbacks=callbacks, verbose=True, backend="gptj")
 searcher = searcher()
-conversation = ConversationChain(llm=llm,verbose=True)
+conversation = ConversationChain(llm=llm, verbose=True)
 text_talk = pyttsx3.init()
 text_talk.say("what do you want me to help you today")
 text_talk.runAndWait()
@@ -271,98 +330,102 @@ while True:
         s = tf.squeeze(tf.round(y_predic.argmax()))
         print(s)
 
+        if s == 1:
 
-        if  s == 1:
-
-
-            so = input("what is the song do you like me to play :(if this song do not exist in my memory you can type i for online searching :) :")
+            so = input(
+                "what is the song do you like me to play :(if this song do not exist in my memory you can type i for online searching :) :")
 
             songs = song()
-            if so =="give me some plasylist" or so=="playlist":
+            if so == "give me some plasylist" or so == "playlist":
                 print(s.get_list_song())
-                so =input("input your song : ")
+                so = input("input your song : ")
                 songs.play_song(so)
                 continue
-            elif so=="i" or "internet":
+            elif so == "i" or "internet":
                 internet_search = input("type your song : ")
                 searcher.query_youtube(internet_search)
 
             else:
                 songs.play_song(so)
                 continue
-        elif s==2:
+        elif s == 2:
             import stock_fish as sf
         #     pass
-        elif s==3:
+        elif s == 3:
 
             x = get_time()
             text_talk.say(f"Current time is {x}")
             text_talk.runAndWait()
-        elif s==4:
+        elif s == 4:
             import tkinter as tk
             from tkinter import filedialog
+
             question_for_visual_data = input("enter your question")
             root = tk.Tk()
             root.withdraw()
             file_path = filedialog.askopenfilename()
             print("Selected file:", file_path)
             root.destroy()
-            visual_documnet_anwer(question_for_asking=question_for_visual_data,path_to_documnet=file_path)
-        elif s==5 or s==0:
+            visual_documnet_anwer(question_for_asking=question_for_visual_data, path_to_documnet=file_path)
+        elif s == 5 or s == 0:
 
             import pretrained_Vit as pv
             import tkinter as tk
             from tkinter import filedialog
+
             print("please choose your file : ")
             root = tk.Tk()
             root.withdraw()
             file_path = filedialog.askopenfilename()
             print("Selected file:", file_path)
             root.destroy()
-            x26 =plt.imread(file_path)
+            x26 = plt.imread(file_path)
             x27 = plt.imshow(x26)
             plt.show()
-            text_talk.say("this your file right?,if not your file you can type n or exit to get out and restart the program")
+            text_talk.say(
+                "this your file right?,if not your file you can type n or exit to get out and restart the program")
             text_talk.runAndWait()
             x = input("that your file ? (y/n)")
-            if x.lower()=="n" or x.lower()=="no":
+            if x.lower() == "n" or x.lower() == "no":
                 continue
             out_put_1 = pv.predict_with_vit_base(file_path)
             out_put_2 = pv.predict_with_resnet_50(file_path)
-            print("model_1 predict :" ,out_put_1)
-            print("model_2 predict :",out_put_2)
-            from Bot_update_pb2 import Visual_processing
-            from Bot_update_pb2 import Visual_Questioner
+            print("model_1 predict :", out_put_1)
+            print("model_2 predict :", out_put_2)
             v_q = Visual_processing()
-            v_q_output,image_path = v_q.predict_step([file_path])
+            v_q_output, image_path = v_q.predict_step([file_path])
             print(v_q_output)
-            v_q_image_anser =input("if you have question please type here")
-            system = SystemMessage(content = f"AI just process and tell the user about image of {out_put_1}", additional_kwargs={}, example=False)
+            v_q_image_anser = input("if you have question please type here")
+            system = SystemMessage(content=f"AI just process and tell the user about image of {out_put_1}",
+                                   additional_kwargs={}, example=False)
             conversation.memory.chat_memory.messages.append(system)
 
-            if v_q_image_anser.lower() =="exit" or v_q_image_anser.lower() =="quit" or v_q_image_anser.lower() =="no":
+            if v_q_image_anser.lower() == "exit" or v_q_image_anser.lower() == "quit" or v_q_image_anser.lower() == "no":
                 continue
             else:
-                answer = Visual_Questioner(question=v_q_image_anser,path=file_path)
+                answer = Visual_Questioner(question=v_q_image_anser, path=file_path)
                 print(answer)
                 continue
-        elif s==6:
+        elif s == 6:
             import tkinter as tk
             from tkinter import filedialog
             from Bot_update_pb2 import BART_summarize
+
             root = tk.Tk()
             root.withdraw()
             file_path = filedialog.askopenfilename()
             print("Selected file:", file_path)
             root.destroy()
             x = BART_summarize(file_path)
-            system = SystemMessage(content =f"AI have summarized the text to the user here summarized text {x}", additional_kwargs={}, example=False)
+            system = SystemMessage(content=f"AI have summarized the text to the user here summarized text {x}",
+                                   additional_kwargs={}, example=False)
             conversation.memory.chat_memory.messages.append(system)
             continue
-        elif s==7:
+        elif s == 7:
             d_i = input("type something you wanna draw : ")
             image_from_AI = draw_image(prompt_t=d_i)
-            system_message = SystemMessage(content =f"AI have drawed image to user , Image name : {d_i}", additional_kwargs={}, example=False)
+            system_message = SystemMessage(content=f"AI have drawed image to user , Image name : {d_i}",
+                                           additional_kwargs={}, example=False)
             conversation.memory.chat_memory.messages.append(system_message)
             continue
 
